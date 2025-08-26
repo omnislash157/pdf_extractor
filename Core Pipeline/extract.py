@@ -1,7 +1,8 @@
-# extract.py - Updated with bulldozer Poppler handling
+# extract.py - Fixed with config import
 """
 OCR extraction module - converts PDFs to positioned text data.
 Bulldozer approach: Always OCR for consistent positioning.
+Corporate firewall workaround: Uses config.py for paths.
 """
 
 import os
@@ -11,17 +12,23 @@ import pytesseract
 from PIL import Image
 import logging
 
+# Import bulldozer config (loud failures if missing)
+try:
+    import config
+    pytesseract.pytesseract.tesseract_cmd = config.TESSERACT_CMD
+    DEFAULT_POPPLER_PATH = config.POPPLER_PATH
+    print(f"📸 Loaded config - Tesseract: {config.TESSERACT_CMD}")
+except ImportError:
+    print("❌ WARNING: config.py not found! Using fallback paths...")
+    # Fallback to original hardcoded paths
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Users\mhartigan\tools\tesseract\tesseract.exe"
+    DEFAULT_POPPLER_PATH = r"C:\Users\mhartigan\tools\poppler-24.08.0\Library\bin"
+
 logger = logging.getLogger(__name__)
+
 
 class OCRExtractor:
     """Handles PDF to text extraction with position data."""
-    
-    # Bulldozer Config: Hard-coded paths with fallbacks
-    DEFAULT_POPPLER_PATHS = [
-        r"C:\Users\mhartigan\tools\poppler-24.08.0\Library\bin",  # Current setup
-        r"C:\tools\poppler\bin",                                   # Common location
-        r"C:\Program Files\poppler\bin",                          # Standard install
-    ]
     
     def __init__(self, 
                  confidence_threshold: int = 60, 
@@ -33,78 +40,19 @@ class OCRExtractor:
             confidence_threshold: Minimum OCR confidence (0-100)
             dpi: Resolution for PDF rendering
             tesseract_config: Tesseract configuration string
-            poppler_path: Override Poppler path (None = auto-detect)
+            poppler_path: Override Poppler path (None = use config default)
         """
         self.confidence_threshold = confidence_threshold
         self.dpi = dpi
         self.tesseract_config = tesseract_config
         
-        # Bulldozer Poppler Detection
-        self.poppler_path = self._get_poppler_path(poppler_path)
+        # Use provided path or fall back to config
+        self.poppler_path = poppler_path or DEFAULT_POPPLER_PATH
         
         logger.info(f"OCRExtractor initialized:")
         logger.info(f"  Poppler: {self.poppler_path}")
-        logger.info(f"  Tesseract config: {tesseract_config}")
-    
-    def _get_poppler_path(self, override_path: str = None) -> str:
-        """
-        Bulldozer approach: Find Poppler or fail loudly.
-        
-        Args:
-            override_path: Explicit path override
-            
-        Returns:
-            Valid Poppler path
-            
-        Raises:
-            RuntimeError: If no valid Poppler found
-        """
-        # Check override first
-        if override_path:
-            if self._validate_poppler_path(override_path):
-                logger.info(f"Using override Poppler path: {override_path}")
-                return override_path
-            else:
-                raise RuntimeError(f"Invalid override Poppler path: {override_path}")
-        
-        # Check environment variable
-        env_path = os.environ.get('POPPLER_PATH')
-        if env_path and self._validate_poppler_path(env_path):
-            logger.info(f"Using POPPLER_PATH env var: {env_path}")
-            return env_path
-        
-        # Check default paths
-        for path in self.DEFAULT_POPPLER_PATHS:
-            if self._validate_poppler_path(path):
-                logger.info(f"Found Poppler at: {path}")
-                return path
-        
-        # Try without path (system PATH)
-        logger.warning("No custom Poppler path found, trying system PATH")
-        return None  # Let pdf2image use system PATH
-    
-    def _validate_poppler_path(self, path: str) -> bool:
-        """
-        Validate Poppler installation.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if valid Poppler installation
-        """
-        if not path or not os.path.exists(path):
-            return False
-        
-        # Check for required executables
-        required_exes = ['pdftoppm.exe', 'pdftocairo.exe']
-        for exe in required_exes:
-            exe_path = os.path.join(path, exe)
-            if not os.path.exists(exe_path):
-                logger.debug(f"Missing Poppler executable: {exe_path}")
-                return False
-        
-        return True
+        logger.info(f"  Tesseract: {pytesseract.pytesseract.tesseract_cmd}")
+        logger.info(f"  Config: {tesseract_config}")
     
     def extract_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
         """
@@ -116,13 +64,9 @@ class OCRExtractor:
         Returns:
             List of text items with position data
         """
-
-        print("📸 Using custom Tesseract path")
-        print("🧭", pytesseract.pytesseract.tesseract_cmd)
-
         try:
-            # Bulldozer PDF conversion with explicit error handling
-            if self.poppler_path:
+            # Convert PDF to images
+            if self.poppler_path and os.path.exists(self.poppler_path):
                 images = convert_from_path(
                     pdf_path, 
                     dpi=self.dpi, 
@@ -130,21 +74,33 @@ class OCRExtractor:
                 )
             else:
                 # Fallback to system PATH
+                logger.warning("Poppler path not found, using system PATH")
                 images = convert_from_path(pdf_path, dpi=self.dpi)
                 
         except Exception as e:
-            # Loud failure with helpful context
-            error_msg = f"PDF conversion failed: {e}"
+            # Bulldozer: Loud failure with helpful message
+            error_msg = f"\n{'='*60}\n❌ PDF CONVERSION FAILED!\n"
+            error_msg += f"File: {pdf_path}\n"
+            error_msg += f"Error: {e}\n"
+            
             if self.poppler_path:
-                error_msg += f"\nPoppler path: {self.poppler_path}"
-                error_msg += f"\nCheck that Poppler binaries exist and are accessible"
+                error_msg += f"Poppler path: {self.poppler_path}\n"
+                if not os.path.exists(self.poppler_path):
+                    error_msg += "⚠️  Path does not exist! Check config.py\n"
             else:
-                error_msg += f"\nUsing system PATH - ensure Poppler is installed"
+                error_msg += "Using system PATH for Poppler\n"
+            
+            error_msg += "\nFixes:\n"
+            error_msg += "1. Check config.py has correct paths\n"
+            error_msg += "2. Verify Poppler is installed\n"
+            error_msg += "3. Try: pip install pdf2image\n"
+            error_msg += f"{'='*60}"
+            
             raise RuntimeError(error_msg)
         
-        # Enforce single-page guard (existing logic)
+        # Single-page enforcement
         if len(images) > 1:
-            logger.warning(f"Multi-page PDF detected ({len(images)} pages). Processing only page 1.")
+            logger.warning(f"Multi-page PDF ({len(images)} pages). Using page 1 only.")
             images = [images[0]]
         elif len(images) == 0:
             raise ValueError("No pages found in PDF.")
@@ -154,6 +110,7 @@ class OCRExtractor:
             page_data = self._extract_from_image(img, page_num + 1)
             extracted.extend(page_data)
         
+        logger.info(f"Extracted {len(extracted)} text items from {pdf_path}")
         return extracted
     
     def extract_from_image(self, image_path: str) -> List[Dict[str, Any]]:
@@ -166,21 +123,32 @@ class OCRExtractor:
         return self._extract_from_image(img, page=1)
     
     def _extract_from_image(self, img: Image.Image, page: int) -> List[Dict[str, Any]]:
-        """Internal method to extract text from PIL Image."""
-
-    def _extract_from_image(self, img: Image.Image, page: int) -> List[Dict[str, Any]]:
-        import pytesseract
-        pytesseract.pytesseract.tesseract_cmd = r"C:\Users\mhartigan\tools\tesseract\tesseract.exe"
-       
+        """
+        Internal method to extract text from PIL Image.
+        Single implementation - no duplicates!
+        """
         try:
+            # Run OCR with configured Tesseract
             data = pytesseract.image_to_data(
                 img, 
                 output_type=pytesseract.Output.DICT, 
                 config=self.tesseract_config
             )
         except Exception as e:
-            raise RuntimeError(f"OCR failed on page {page}: {e}")
+            # Bulldozer: Loud failure
+            error_msg = f"\n{'='*60}\n❌ OCR FAILED!\n"
+            error_msg += f"Page: {page}\n"
+            error_msg += f"Error: {e}\n"
+            error_msg += f"Tesseract: {pytesseract.pytesseract.tesseract_cmd}\n"
+            
+            if not os.path.exists(pytesseract.pytesseract.tesseract_cmd):
+                error_msg += "⚠️  Tesseract path does not exist!\n"
+                error_msg += "Check config.py and update TESSERACT_PATHS\n"
+            
+            error_msg += f"{'='*60}"
+            raise RuntimeError(error_msg)
         
+        # Extract text with confidence filtering
         extracted = []
         for i in range(len(data['text'])):
             if int(data['conf'][i]) > self.confidence_threshold and data['text'][i].strip():
@@ -194,4 +162,5 @@ class OCRExtractor:
                     'confidence': data['conf'][i]
                 })
         
+        logger.info(f"Page {page}: Extracted {len(extracted)} text items")
         return extracted

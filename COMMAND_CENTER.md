@@ -1,6 +1,6 @@
 # PDF Extractor — Command Center
 
-**Version:** v2.1.2 | **Status:** Stable | **Architecture:** Bulldozer (Draw → OCR → Slice → Excel)
+**Version:** v2.1.3 | **Status:** Stable | **Architecture:** Bulldozer (Draw → OCR → Slice → Excel)
 
 Modular, deterministic table slicer powered by OCR and human-drawn templates.
 
@@ -28,7 +28,8 @@ pdf_extractor/
 │   ├── extract.py           # OCR engine (Tesseract + Poppler)
 │   ├── slicer.py           # Table binning logic
 │   ├── template.py         # Template manager & auto-detection
-│   └── quality.py          # Extraction scoring & diagnostics
+│   ├── quality.py          # Extraction scoring & diagnostics
+│   └── config.py           # Path configuration (NEW in v2.1.3)
 │
 ├── 🎨 GUI Components  
 │   ├── launch_gui.py        # GUI launcher
@@ -36,7 +37,8 @@ pdf_extractor/
 │
 ├── 🧪 Testing
 │   ├── test_pipeline.py     # Integration tests + dummy PDF builder
-│   └── test_quality.py      # Unit tests for quality scoring
+│   ├── test_quality.py      # Unit tests for quality scoring
+│   └── test_gui_sprint.py   # GUI sprint test suite (NEW in v2.1.3)
 │
 ├── 📂 Data Directories
 │   ├── incoming/            # Drop PDFs here for processing
@@ -46,7 +48,8 @@ pdf_extractor/
 │
 ├── ⚙️ Configuration
 │   ├── vendor_templates.json # Human-drawn layout definitions
-│   ├── REQUIREMENTS.txt     # Python dependencies
+│   ├── requirements.txt     # Python dependencies
+│   ├── config.py           # OCR tool paths (NEW in v2.1.3)
 │   └── venv/               # Python virtual environment
 │
 └── 📚 Documentation
@@ -84,7 +87,7 @@ pipeline.process("incoming/sysco_invoice.pdf", vendor="sysco")
 ## 🔧 Requirements
 
 ### Python Dependencies
-Install via `pip install -r REQUIREMENTS.txt`:
+Install via `pip install -r requirements.txt`:
 - pytesseract
 - pdf2image  
 - PyMuPDF
@@ -97,7 +100,12 @@ Manual installation required:
 - **Tesseract OCR** (latest stable)
 - **Poppler** (e.g., poppler-24.08.0)
 
-space
+**⚠️ Corporate Firewall Note (v2.1.3):**
+- Paths to Tesseract and Poppler are configured in `config.py`
+- Default paths point to manual installations in `C:\Users\mhartigan\tools\`
+- This is an intentional workaround for IT restrictions blocking package managers
+- Full portability planned for v2.3+ when restrictions are lifted
+
 ---
 
 ## ✅ Component Status
@@ -105,11 +113,12 @@ space
 | Component | Status | Notes |
 |-----------|--------|-------|
 | GUI System | ✅ Stable | DrawSnap GUI functional, saves JSON |
-| OCR Engine | ✅ Stable | Single-page processing, auto Poppler detection |
+| OCR Engine | ✅ Stable | Single-page processing, config-based paths |
 | Template System | ✅ Stable | Auto/fuzzy vendor matching + manual drawing |
 | Data Slicer | ✅ Stable | Adaptive row and column binning |
 | CLI Pipeline | ✅ Stable | Complete end-to-end processing |
 | Quality Scoring | ✅ Stable | Available but not surfaced in UI |
+| Path Configuration | ✅ Stable | config.py handles tool paths (v2.1.3) |
 | FastAPI Server | 🟡 Planned | Next sprint priority |
 | Batch Processing | 🟡 Planned | Optional wrapper for bulk operations |
 
@@ -131,8 +140,15 @@ space
 
 ---
 
-## 📋 Recent Changes (v2.1.2)
+## 📋 Recent Changes (v2.1.3)
 
+- **🔧 Path Configuration:** Added `config.py` for tool paths (no .env dependency)
+- **🧪 Test Suite:** Added `test_gui_sprint.py` for comprehensive testing
+- **🐛 Bug Fix:** Removed duplicate `_extract_from_image` method in `extract.py`
+- **📝 Documentation:** Added corporate firewall workaround notes
+- **🚜 Bulldozer:** Louder error messages when paths fail
+
+### Previous (v2.1.2)
 - **🎨 GUI Integration:** DrawSnap visual template tool added
 - **🧠 Modular Refactor:** Separated concerns into focused modules  
 - **🧪 Quality System:** Comprehensive scoring with unit tests
@@ -178,6 +194,8 @@ Scope: [brief description of planned work]
 | `quality.py` | Result validation | Extraction accuracy scoring |
 | `drawsnap_gui.py` | Template creation interface | Visual layout definition tool |
 | `vendor_templates.json` | Layout definitions | Human-drawn template storage |
+| `config.py` | Tool path configuration | Corporate firewall workaround (v2.1.3) |
+| `test_gui_sprint.py` | GUI test suite | Complete system validation (v2.1.3) |
 
 ---
 
@@ -189,4 +207,6 @@ This system prioritizes **deterministic, reproducible extraction** over AI-based
 
 ---
 
-*Command Center v2.1.2 — The OS of the PDF Extractor Project*
+
+
+Command Center v2.1.3 — The OS of the PDF Extractor Project
