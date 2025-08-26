@@ -15,8 +15,6 @@ from typing import Optional, Tuple, List
 
 print("🚀 GUI Script Starting")
 
-
-
 class DrawSnapApp:
     """GUI application for drawing table extraction templates."""
     
@@ -35,8 +33,11 @@ class DrawSnapApp:
         self.pdf_path = pdf_path
         self.vendor = vendor
         self.image = None
+        self.original_image = None  # Grok Smash: Base for zoom resizing
         self.tk_img = None
-        self.scale_factor = 1.0
+        self.scale_factor = 1.0  # Grok Smash: Starts at 100%
+        self.zoom_level = tk.StringVar(value="100%")  # Grok Smash: Live display
+        self.shift_pressed = False  # Grok Smash: For horizontal wheel
         self.dpi = 150
         
         # Drawing state
@@ -66,6 +67,14 @@ class DrawSnapApp:
         tk.Button(control_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=2)
         tk.Button(control_frame, text="Save Template", command=self.save_template).pack(side=tk.LEFT, padx=2)
         
+        # Grok Smash: Zoom controls frame
+        zoom_frame = tk.Frame(control_frame)
+        zoom_frame.pack(side=tk.LEFT, padx=5)
+        tk.Button(zoom_frame, text="-", command=self.zoom_out).pack(side=tk.LEFT)
+        tk.Button(zoom_frame, text="Fit", command=self.zoom_fit).pack(side=tk.LEFT)
+        tk.Button(zoom_frame, text="+", command=self.zoom_in).pack(side=tk.LEFT)
+        tk.Label(zoom_frame, textvariable=self.zoom_level).pack(side=tk.LEFT, padx=5)
+        
         # Status label
         self.status_label = tk.Label(control_frame, text="Load a PDF to begin")
         self.status_label.pack(side=tk.LEFT, padx=20)
@@ -93,6 +102,14 @@ class DrawSnapApp:
         self.canvas.bind("<Button-1>", self.on_click)
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        
+        # Grok Smash: Mouse wheel bindings (cross-platform)
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)  # Windows/Mac
+        self.canvas.bind("<Shift-MouseWheel>", self.on_shift_mousewheel)  # Horizontal
+        self.canvas.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"))  # Linux up
+        self.canvas.bind("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"))   # Linux down
+        self.root.bind("<KeyPress-Shift_L>", lambda e: setattr(self, 'shift_pressed', True))
+        self.root.bind("<KeyRelease-Shift_L>", lambda e: setattr(self, 'shift_pressed', False))
     
     def load_pdf_dialog(self):
         """Open file dialog to load PDF."""
@@ -124,56 +141,69 @@ class DrawSnapApp:
             # Convert to PIL Image
             img_bytes = pix.tobytes("png")
             self.image = Image.open(io.BytesIO(img_bytes))
+            self.original_image = self.image.copy()  # Grok Smash: Base for resizing
             
-            # Display on canvas
-            self.tk_img = ImageTk.PhotoImage(self.image)
-            self.canvas.delete("all")
-            self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
-            self.canvas.config(scrollregion=self.canvas.bbox("all"))
-            
-            # Update status
-            self.status_label.config(text=f"Loaded: {pdf_path.split('/')[-1]}")
-            
-            doc.close()
+            # Grok Smash: Auto-fit on load
+            self.zoom_fit()
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load PDF: {e}")
     
-    def start_box_drawing(self):
-        """Enter box drawing mode."""
-        if not self.image:
-            messagebox.showwarning("No PDF", "Please load a PDF first")
+    # Grok Smash: Zoom methods
+    def zoom_out(self):
+        if not self.original_image:
             return
-        
+        self._zoom(0.8)
+    
+    def zoom_in(self):
+        if not self.original_image:
+            return
+        self._zoom(1.25)
+    
+    def zoom_fit(self):
+        if not self.original_image:
+            return
+        canvas_w, canvas_h = self.canvas.winfo_width(), self.canvas.winfo_height()
+        img_w, img_h = self.original_image.size
+        fit_scale = min(canvas_w / img_w, canvas_h / img_h) * 0.9  # 90% fit with margin
+        self._zoom(fit_scale / self.scale_factor)  # Apply relative
+    
+    def _zoom(self, factor: float):
+        self.scale_factor *= factor
+        self.scale_factor = max(0.2, min(5.0, self.scale_factor))  # Cap extremes
+        new_size = (int(self.original_image.width * self.scale_factor), 
+                    int(self.original_image.height * self.scale_factor))
+        resized = self.original_image.resize(new_size, Image.LANCZOS)  # High-quality
+        self.tk_img = ImageTk.PhotoImage(resized)
+        self.canvas.delete("all")
+        self.canvas_img_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
+        self.canvas.config(scrollregion=(0, 0, new_size[0], new_size[1]))
+        self.zoom_level.set(f"{int(self.scale_factor * 100)}%")
+        self._redraw_elements()  # Grok Smash: Stub for redrawing box/columns (expand later)
+    
+    def _redraw_elements(self):
+        # Grok Smash: Placeholder - redraw scaled box and columns here in next P0
+        pass
+    
+    # Grok Smash: Wheel handlers
+    def on_mousewheel(self, event):
+        if self.shift_pressed:
+            self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+        else:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    
+    def on_shift_mousewheel(self, event):
+        self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+    
+    def start_box_drawing(self):
         self.drawing_mode = 'box'
-        self.status_label.config(text="Click and drag to draw table box")
-        
-        # Clear existing box
-        if self.box_rect:
-            self.canvas.delete(self.box_rect)
-            self.box_rect = None
+        self.status_label.config(text="Draw mode: Box - Click and drag to draw")
     
     def start_column_drawing(self):
-        """Enter column drawing mode."""
-        if not self.image:
-            messagebox.showwarning("No PDF", "Please load a PDF first")
-            return
-        
-        if not self.box_coords:
-            messagebox.showwarning("No Box", "Please draw table box first")
-            return
-        
         self.drawing_mode = 'columns'
-        self.status_label.config(text="Click to add column separators")
-        
-        # Clear existing columns
-        for line in self.column_lines:
-            self.canvas.delete(line)
-        self.column_lines = []
-        self.column_coords = []
+        self.status_label.config(text="Draw mode: Columns - Click to add vertical lines")
     
     def clear_all(self):
-        """Clear all drawings."""
         if self.box_rect:
             self.canvas.delete(self.box_rect)
             self.box_rect = None
@@ -228,7 +258,7 @@ class DrawSnapApp:
             # Normalize coordinates
             self.box_coords = [
                 min(x1, x2), min(y1, y2),
-                max(x1, x2), max(y1, y2)
+                max(x1, x2), max(y2, y2)
             ]
             
             self.status_label.config(text=f"Box: {self.box_coords}")
