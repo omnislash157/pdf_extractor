@@ -1,20 +1,21 @@
 # drawsnap_gui.py
 """
 DrawSnap GUI module - visual template creation for table extraction.
-Refactored with modular architecture for maintainability.
+v2.3: Vendor dropdown with auto-load functionality.
 """
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import io
 import json
 import os
+from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 from dataclasses import dataclass
 
-print("🚀 DrawSnap GUI Starting (Modular v2.2)")
+print("🚀 DrawSnap GUI Starting (v2.3 - Vendor Edition)")
 
 
 @dataclass
@@ -142,9 +143,9 @@ class TemplateSaver:
         self.templates_file = templates_file
     
     def save_template(self, box_coords: List[int], column_coords: List[int], 
-                     vendor: Optional[str] = None) -> Tuple[bool, str]:
+                     vendor: Optional[str] = None, scale_factor: float = 1.0) -> Tuple[bool, str]:
         """
-        Save template to JSON file.
+        Save template to JSON file with metadata.
         
         Returns:
             (success, message) tuple
@@ -161,25 +162,44 @@ class TemplateSaver:
         # Prepare column coordinates
         columns = self._prepare_columns(column_coords, box_coords)
         
-        # Create template
+        # Load existing templates to check if updating
+        templates = self._load_templates()
+        is_update = vendor in templates
+        
+        # Create template with metadata
+        now = datetime.now().isoformat()
         template = {
             'table_box': box_coords,
             'columns': columns,
-            'vendor': vendor
+            'vendor': vendor,
+            'created': templates[vendor].get('created', now) if is_update else now,
+            'modified': now,
+            'page': 1,  # Default to page 1 for now
+            'scale_at_save': round(scale_factor, 2)
         }
         
         # Save to file
         try:
-            templates = self._load_templates()
             templates[vendor] = template
             
             with open(self.templates_file, 'w') as f:
                 json.dump(templates, f, indent=4)
             
-            return True, f"Template saved for vendor: {vendor}"
+            action = "Updated" if is_update else "Created"
+            return True, f"{action} template for vendor: {vendor}"
             
         except Exception as e:
             return False, f"Failed to save template: {e}"
+    
+    def load_template(self, vendor: str) -> Optional[Dict[str, Any]]:
+        """Load a specific vendor's template."""
+        templates = self._load_templates()
+        return templates.get(vendor)
+    
+    def list_vendors(self) -> List[str]:
+        """Get sorted list of all vendors with templates."""
+        templates = self._load_templates()
+        return sorted(templates.keys())
     
     def prompt_vendor(self) -> Optional[str]:
         """Prompt user for vendor name."""
@@ -208,8 +228,11 @@ class TemplateSaver:
     def _load_templates(self) -> Dict[str, Any]:
         """Load existing templates from file."""
         if os.path.exists(self.templates_file):
-            with open(self.templates_file, 'r') as f:
-                return json.load(f)
+            try:
+                with open(self.templates_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                return {}
         return {}
 
 
@@ -264,13 +287,25 @@ class DrawSnapApp:
         self.drawing_state = DrawingState()
         self.drag_start = None
         
+        # Vendor management
+        self.vendor_var = tk.StringVar()
+        self.vendor_dropdown = None
+        
         # UI setup
         self._setup_ui()
         self.status_manager = StatusManager(self.status_label)
         
+        # Initialize vendor list
+        self._refresh_vendor_list()
+        
         # Load PDF if provided
         if pdf_path:
             self.load_pdf(pdf_path)
+        
+        # Auto-load vendor template if provided
+        if vendor and vendor in self.saver.list_vendors():
+            self.vendor_var.set(vendor)
+            self._on_vendor_select(vendor)
     
     def _setup_ui(self):
         """Create UI elements."""
@@ -289,6 +324,17 @@ class DrawSnapApp:
                  command=self.clear_all).pack(side=tk.LEFT, padx=2)
         tk.Button(control_frame, text="💾 Save Template", 
                  command=self.save_template).pack(side=tk.LEFT, padx=2)
+        
+        # Vendor dropdown frame
+        vendor_frame = tk.Frame(control_frame)
+        vendor_frame.pack(side=tk.LEFT, padx=10)
+        tk.Label(vendor_frame, text="Vendor:").pack(side=tk.LEFT, padx=2)
+        
+        # Create dropdown (combobox for better UX)
+        self.vendor_dropdown = ttk.Combobox(vendor_frame, textvariable=self.vendor_var,
+                                           state="readonly", width=15)
+        self.vendor_dropdown.pack(side=tk.LEFT, padx=2)
+        self.vendor_dropdown.bind("<<ComboboxSelected>>", self._on_vendor_select_event)
         
         # Zoom controls
         zoom_frame = tk.Frame(control_frame)
@@ -540,17 +586,88 @@ class DrawSnapApp:
         """Handle shift+mousewheel for horizontal scroll."""
         self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
     
+    def _refresh_vendor_list(self):
+        """Refresh the vendor dropdown with current templates."""
+        vendors = self.saver.list_vendors()
+        
+        if vendors:
+            # Add "Select Vendor" as first option
+            vendors.insert(0, "Select Vendor")
+            self.vendor_dropdown['values'] = vendors
+            if not self.vendor_var.get():
+                self.vendor_var.set("Select Vendor")
+        else:
+            self.vendor_dropdown['values'] = ["No Templates Found"]
+            self.vendor_var.set("No Templates Found")
+            self.vendor_dropdown.config(state="disabled")
+    
+    def _on_vendor_select_event(self, event):
+        """Handle vendor selection from dropdown (event binding)."""
+        vendor = self.vendor_var.get()
+        if vendor and vendor not in ["Select Vendor", "No Templates Found"]:
+            self._on_vendor_select(vendor)
+    
+    def _on_vendor_select(self, vendor: str):
+        """Apply selected vendor's template."""
+        template = self.saver.load_template(vendor)
+        
+        if not template:
+            messagebox.showwarning("Warning", f"Could not load template for {vendor}")
+            return
+        
+        # Extract column x-coordinates from the template
+        # (removing boundaries since they're implied by the box)
+        columns = template.get('columns', [])
+        if len(columns) > 2:
+            # Remove first and last if they match box boundaries
+            box = template.get('table_box', [])
+            if columns and box:
+                if columns[0] == box[0]:
+                    columns = columns[1:]
+                if columns and columns[-1] == box[2]:
+                    columns = columns[:-1]
+        else:
+            columns = []  # No intermediate columns
+        
+        # Update drawing state with loaded template
+        self.drawing_state = DrawingState(
+            box_coords=template.get('table_box'),
+            column_coords=columns
+        )
+        
+        # Store vendor for saving
+        self.vendor = vendor
+        
+        # Render the template
+        self._update_display()
+        
+        # Update status
+        page = template.get('page', 1)
+        created = template.get('created', 'unknown')[:10]  # Just date part
+        self.status_manager.update(
+            f"Loaded {vendor} template (page {page}, created {created})", "📋"
+        )
+    
     def save_template(self):
         """Save the current template."""
         success, message = self.saver.save_template(
             self.drawing_state.box_coords,
             self.drawing_state.column_coords,
-            self.vendor
+            self.vendor,
+            self.scale_factor
         )
         
         if success:
             messagebox.showinfo("Success", message)
             self.status_manager.update(message, "💾")
+            
+            # Refresh vendor list to include new vendor
+            self._refresh_vendor_list()
+            
+            # Select the saved vendor
+            if self.vendor:
+                self.vendor_var.set(self.vendor)
+            
             self.root.destroy()
         else:
             if message != "No vendor name provided":  # User cancelled
