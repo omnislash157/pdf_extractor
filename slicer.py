@@ -2,12 +2,13 @@
 """
 Table slicing module - bins positioned text into rows and columns.
 Core bulldozer logic for converting positioned text to structured tables.
-v2.2-ready: Enhanced with adaptive row threshold and page filtering prep.
+v2.3: Enhanced with text splitting for wide spans and overflow detection.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 import logging
+import re
 from statistics import median
 
 logger = logging.getLogger(__name__)
@@ -17,18 +18,30 @@ class TableSlicer:
     """Converts positioned text into structured table using templates."""
     
     def __init__(self, 
-                 row_threshold: int = 20,
+                 row_threshold: int = 30,
                  adaptive_threshold: bool = True,
-                 buffer_factor: float = 1.2):
+                 buffer_factor: float = 1.2,
+                 enable_text_splitting: bool = True,
+                 min_overlap_ratio: float = 0.25):
         """
         Args:
             row_threshold: Default pixel threshold for grouping text into same row
             adaptive_threshold: Use adaptive threshold based on median y-gap
             buffer_factor: Multiplier for adaptive threshold (1.2 = 20% buffer)
+            enable_text_splitting: Whether to split wide text spans across columns
+            min_overlap_ratio: Minimum overlap ratio for column assignment
         """
         self.default_row_threshold = row_threshold
         self.adaptive_threshold = adaptive_threshold
         self.buffer_factor = buffer_factor
+        self.enable_text_splitting = enable_text_splitting
+        self.min_overlap_ratio = min_overlap_ratio
+        
+        # Compile regex patterns for unsplittable text types
+        self.date_pattern = re.compile(r'^\d{1,2}/\d{1,2}/\d{2,4}$')
+        self.code_pattern = re.compile(r'^[A-Z]{2,}[-]?\d+$')
+        self.price_pattern = re.compile(r'^\$?\d+\.?\d{0,2}$')
+        self.item_code_pattern = re.compile(r'^[A-Z0-9]+-[A-Z0-9]+$')
     
     def slice_to_table(self, 
                        extracted: List[Dict[str, Any]], 
@@ -47,7 +60,7 @@ class TableSlicer:
         Returns:
             DataFrame with extracted table data
         """
-        # Page filtering prep for v2.2
+        # Page filtering
         if page is not None:
             logger.info(f"Filtering for page {page}")
             extracted = [item for item in extracted if item.get('page', 1) == page]
@@ -59,8 +72,7 @@ class TableSlicer:
         in_box = self._filter_in_box(extracted, table_box)
         
         if not in_box:
-            logger.warning("No text found in table region - returning empty cell")
-            # Return single-cell fallback
+            logger.warning("No text found in table region")
             return pd.DataFrame([['No text found in table region']])
         
         # Determine row threshold
@@ -76,8 +88,8 @@ class TableSlicer:
             logger.warning("No rows could be formed from text")
             return pd.DataFrame([['Unable to form rows from text']])
         
-        # Bin each row into columns
-        table_data = self._bin_into_columns(rows, columns)
+        # Bin each row into columns (with text splitting if enabled)
+        table_data = self._bin_into_columns_with_splitting(rows, columns)
         
         # Ensure consistent column count
         if table_data:
@@ -85,27 +97,20 @@ class TableSlicer:
             for row in table_data:
                 while len(row) < max_cols:
                     row.append('')
+            
+            # Merge partial rows
+            table_data = self._merge_partial_rows(table_data)
         
         return pd.DataFrame(table_data)
     
     def _filter_in_box(self, 
                        extracted: List[Dict[str, Any]], 
                        table_box: List[int]) -> List[Dict[str, Any]]:
-        """
-        Filter text items within table box boundaries.
-        
-        Args:
-            extracted: All extracted text items
-            table_box: [x1, y1, x2, y2] boundaries
-            
-        Returns:
-            Filtered list of text items
-        """
+        """Filter text items within table box boundaries."""
         x1, y1, x2, y2 = table_box
         
         in_box = []
         for item in extracted:
-            # Check if text center is within box (more forgiving than strict boundaries)
             center_x = item['x'] + item.get('width', 0) / 2
             center_y = item['y'] + item.get('height', 0) / 2
             
@@ -119,68 +124,38 @@ class TableSlicer:
                                    text_boxes: List[Dict[str, Any]], 
                                    min_gap: float = 5.0,
                                    max_threshold: float = 50.0) -> float:
-        """
-        Compute adaptive row threshold from median y-gaps.
-        
-        Args:
-            text_boxes: Text items to analyze
-            min_gap: Minimum acceptable gap (below this uses default)
-            max_threshold: Maximum threshold to prevent runaway values
-            
-        Returns:
-            Calculated threshold or default
-        """
+        """Compute adaptive row threshold from median y-gaps."""
         if not text_boxes:
             logger.warning("No text boxes for adaptive threshold - using default")
             return self.default_row_threshold
         
-        # Extract unique y-coordinates (top of each text box)
         y_coords = sorted(set(box.get('y', 0) for box in text_boxes))
         
         if len(y_coords) < 2:
             logger.info("Only one row detected - using default threshold")
             return self.default_row_threshold
         
-        # Calculate gaps between consecutive y-coordinates
         gaps = [y_coords[i+1] - y_coords[i] for i in range(len(y_coords) - 1)]
-        
-        # Filter out tiny gaps (likely same-line elements)
         significant_gaps = [g for g in gaps if g >= min_gap]
         
         if not significant_gaps:
-            logger.warning(f"All gaps < {min_gap}px - likely dense table, using default threshold")
+            logger.warning(f"All gaps < {min_gap}px - using default threshold")
             return self.default_row_threshold
         
-        # Calculate median of significant gaps
         median_gap = median(significant_gaps)
-        
-        # Apply buffer factor
         threshold = median_gap * self.buffer_factor
-        
-        # Clamp to reasonable range (bulldozer safety)
         threshold = min(max(threshold, min_gap), max_threshold)
         
-        logger.info(f"Adaptive row threshold: {threshold:.1f}px (median gap: {median_gap:.1f}px, buffer: {self.buffer_factor}x)")
-        
+        logger.info(f"Adaptive row threshold: {threshold:.1f}px (median gap: {median_gap:.1f}px)")
         return threshold
     
     def _group_into_rows(self, 
                         items: List[Dict[str, Any]], 
                         row_threshold: float) -> List[List[Dict[str, Any]]]:
-        """
-        Group text items into rows based on y-position proximity.
-        
-        Args:
-            items: Text items to group
-            row_threshold: Pixel threshold for same-row determination
-            
-        Returns:
-            List of rows, each row is a list of text items
-        """
+        """Group text items into rows based on y-position proximity."""
         if not items:
             return []
         
-        # Sort by y-position
         items = sorted(items, key=lambda x: x['y'])
         
         rows = []
@@ -188,99 +163,237 @@ class TableSlicer:
         current_row_y = items[0]['y']
         
         for item in items[1:]:
-            # Check if item belongs to current row
             if abs(item['y'] - current_row_y) <= row_threshold:
                 current_row.append(item)
-                # Update row y to weighted average (optional refinement)
                 total_width = sum(i.get('width', 1) for i in current_row)
                 current_row_y = sum(i['y'] * i.get('width', 1) for i in current_row) / total_width
             else:
-                # Start new row
                 rows.append(current_row)
                 current_row = [item]
                 current_row_y = item['y']
         
-        # Add last row
         if current_row:
             rows.append(current_row)
         
         logger.info(f"Grouped {len(items)} text items into {len(rows)} rows")
-        
-        # Log row statistics for debugging
-        if rows:
-            row_lengths = [len(row) for row in rows]
-            logger.debug(f"Row item counts: min={min(row_lengths)}, max={max(row_lengths)}, avg={sum(row_lengths)/len(row_lengths):.1f}")
-        
         return rows
     
-    def _bin_into_columns(self, 
-                         rows: List[List[Dict[str, Any]]], 
-                         columns: List[int]) -> List[List[str]]:
+    def _is_splittable_text(self, text: str) -> bool:
         """
-        Bin text items in each row into columns.
+        Determine if text can be split on whitespace.
+        Protected patterns: dates, codes, prices, item codes.
+        """
+        # Check if text matches any protected pattern
+        if (self.date_pattern.match(text) or 
+            self.code_pattern.match(text) or 
+            self.price_pattern.match(text) or
+            self.item_code_pattern.match(text)):
+            return False
         
-        Args:
-            rows: List of rows with text items
-            columns: Column separator x-positions
-            
-        Returns:
-            Table data as list of lists
+        # Check if text contains whitespace to split on
+        return ' ' in text
+    
+    def _calculate_column_spans(self, left_x: int, width: int, columns: List[int]) -> Tuple[List[int], List[float]]:
         """
+        Calculate which columns a text item spans and overlap ratios.
+        
+        Returns:
+            Tuple of (overlapping column indices, overlap ratios)
+        """
+        right_x = left_x + width
+        num_cols = len(columns) - 1
+        
+        overlapping_cols = []
+        overlap_ratios = []
+        
+        for c in range(num_cols):
+            col_left = columns[c]
+            col_right = columns[c + 1]
+            
+            overlap = max(0, min(right_x, col_right) - max(left_x, col_left))
+            if overlap > 0:
+                overlapping_cols.append(c)
+                ratio = overlap / width if width > 0 else 0
+                overlap_ratios.append(ratio)
+        
+        return overlapping_cols, overlap_ratios
+    
+    def _split_text_to_columns(self, text: str, left_x: int, width: int, 
+                               overlapping_cols: List[int], columns: List[int]) -> Dict[int, str]:
+        """
+        Split text across multiple columns proportionally.
+        
+        Returns:
+            Dictionary mapping column index to text portion
+        """
+        tokens = text.split()
+        if not tokens:
+            return {}
+        
+        # Calculate proportional width for each token
+        token_lengths = [len(t) for t in tokens]
+        total_length = sum(token_lengths)
+        if total_length == 0:
+            return {}
+        
+        pixels_per_char = width / total_length
+        
+        # Assign tokens to columns
+        column_assignments = {}
+        current_x = left_x
+        
+        for token, token_len in zip(tokens, token_lengths):
+            token_width = token_len * pixels_per_char
+            token_center = current_x + token_width / 2
+            
+            # Find best column for this token
+            assigned = False
+            for c in overlapping_cols:
+                col_left = columns[c]
+                col_right = columns[c + 1]
+                if col_left <= token_center < col_right:
+                    if c not in column_assignments:
+                        column_assignments[c] = []
+                    column_assignments[c].append(token)
+                    assigned = True
+                    break
+            
+            if not assigned and overlapping_cols:
+                # Fallback: assign to nearest overlapping column
+                best_col = min(overlapping_cols, 
+                             key=lambda c: abs(token_center - (columns[c] + columns[c+1])/2))
+                if best_col not in column_assignments:
+                    column_assignments[best_col] = []
+                column_assignments[best_col].append(token)
+            
+            current_x += token_width
+        
+        # Join tokens in each column
+        return {col: ' '.join(tokens) for col, tokens in column_assignments.items()}
+    
+    def _bin_into_columns_with_splitting(self, 
+                                    rows: List[List[Dict[str, Any]]], 
+                                    columns: List[int]) -> List[List[str]]:
+        """Enhanced column binning with text splitting for wide spans."""
+    
+         # DEBUG: Verify we're in the right method
+        logger.warning(f"DEBUG: Using splitting method with {len(columns)-1} columns")
+        logger.warning(f"DEBUG: Splitting enabled: {self.enable_text_splitting}")
+    
         if not columns or len(columns) < 2:
-            # No valid columns, put everything in one column
             logger.warning("Invalid column definition - creating single column")
             return [[' '.join(item['text'] for item in row)] for row in rows]
+    
+    # ... rest of method
         
         num_cols = len(columns) - 1
         table_data = []
         
         for row_idx, row in enumerate(rows):
-            # Sort items left to right
             row = sorted(row, key=lambda x: x['x'])
-            
-            # Initialize column texts
-            col_texts = [''] * num_cols
+            col_bins = [[] for _ in range(num_cols)]
             
             for item in row:
-                # Find which column this item belongs to (using center point)
-                center_x = item['x'] + item.get('width', 0) / 2
+                text = item.get('text', '').strip()
+                if not text:
+                    continue
                 
-                # Find appropriate column
-                placed = False
-                for c in range(num_cols):
-                    if columns[c] <= center_x < columns[c + 1]:
-                        if col_texts[c]:
-                            col_texts[c] += ' '
-                        col_texts[c] += item['text']
-                        placed = True
-                        break
+                left_x = item['x']
+                width = item.get('width', 0)
                 
-                # If not placed, try edge cases
-                if not placed:
-                    if center_x < columns[0]:
-                        # Before first column - add to first
-                        if col_texts[0]:
-                            col_texts[0] = item['text'] + ' ' + col_texts[0]
-                        else:
-                            col_texts[0] = item['text']
-                    elif center_x >= columns[-1]:
-                        # After last column - add to last
-                        if col_texts[-1]:
-                            col_texts[-1] += ' '
-                        col_texts[-1] += item['text']
+                # Handle zero-width items
+                if width == 0:
+                    for c in range(num_cols):
+                        if columns[c] <= left_x < columns[c + 1]:
+                            col_bins[c].append(text)
+                            break
+                    else:
+                        if left_x < columns[0]:
+                            col_bins[0].append(text)
+                        elif left_x >= columns[-1]:
+                            col_bins[-1].append(text)
+                    continue
+                
+                # Calculate column spans
+                overlapping_cols, overlap_ratios = self._calculate_column_spans(left_x, width, columns)
+                
+                # Determine if we should split this text
+                spans_multiple = len(overlapping_cols) > 1
+                is_splittable = self._is_splittable_text(text) if self.enable_text_splitting else False
+                
+                if spans_multiple and is_splittable:
+                    # Split text across columns
+                    split_assignments = self._split_text_to_columns(
+                        text, left_x, width, overlapping_cols, columns
+                    )
+                    
+                    for col, col_text in split_assignments.items():
+                        col_bins[col].append(col_text)
+                    
+                    logger.debug(f"Split '{text}' across columns {list(split_assignments.keys())}")
+                    
+                    # Mark as overflow if it was split
+                    item['overflow'] = True
+                    
+            else:
+                # ADD DEBUG LINE HERE:
+                if spans_multiple:
+                        logger.warning(f"DEBUG: NOT SPLITTING '{text}' - spans {len(overlapping_cols)} cols, splittable={is_splittable}")
+                    
+                # Assign to single best column
+                if overlapping_cols and overlap_ratios:
+                    best_idx = overlap_ratios.index(max(overlap_ratios))
+                    best_col = overlapping_cols[best_idx]
+                    col_bins[best_col].append(text)
+                        
+                    # Mark as overflow if it spans multiple columns but wasn't split
+                    if spans_multiple:
+                        item['overflow'] = True
+                        logger.debug(f"Wide span '{text}' assigned to col {best_col} (overflow marked)")
+                else:
+                    # No overlap - use fallback
+                    for c in range(num_cols):
+                        if columns[c] <= left_x < columns[c + 1]:
+                             col_bins[c].append(text)
+                            break
             
-            # Clean up column texts
-            col_texts = [text.strip() for text in col_texts]
+            # Join text in each column
+            col_texts = [' '.join(bin_items) for bin_items in col_bins]
             table_data.append(col_texts)
         
-        logger.info(f"Created table with {len(table_data)} rows and {num_cols} columns")
-        
-        # Warn if many empty cells
+        # Log statistics
         if table_data:
             empty_cells = sum(1 for row in table_data for cell in row if not cell)
             total_cells = len(table_data) * num_cols
             empty_ratio = empty_cells / total_cells
+            
             if empty_ratio > 0.5:
                 logger.warning(f"High empty cell ratio: {empty_ratio:.1%} ({empty_cells}/{total_cells})")
+            else:
+                logger.info(f"Table created: {len(table_data)} rows × {num_cols} cols")
         
         return table_data
+    
+    def _merge_partial_rows(self, table_data: List[List[str]], min_columns: int = 4) -> List[List[str]]:
+        """Merge partial rows into previous complete rows."""
+        if not table_data:
+            return table_data
+        
+        cleaned_rows = []
+        
+        for i, row in enumerate(table_data):
+            filled_cells = sum(1 for cell in row if cell.strip())
+            
+            if filled_cells < min_columns and cleaned_rows:
+                logger.debug(f"Merging partial row {i} ({filled_cells} filled cells) into previous")
+                for j, cell in enumerate(row):
+                    if cell.strip():
+                        if cleaned_rows[-1][j]:
+                            cleaned_rows[-1][j] += ' ' + cell.strip()
+                        else:
+                            cleaned_rows[-1][j] = cell.strip()
+            else:
+                cleaned_rows.append(row)
+        
+        logger.info(f"Merged {len(table_data)} rows into {len(cleaned_rows)} clean rows")
+        return cleaned_rows

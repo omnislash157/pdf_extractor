@@ -1,0 +1,43 @@
+INFO -    Extracted 256 text items natively
+INFO - Filtered 149 text items within table box from 256 total
+INFO - Adaptive row threshold: 6.0px (median gap: 5.0px)
+INFO - Grouped 149 text items into 19 rows
+DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+DEBUG - Split '160CT 3OZ BURGER' across columns [3]
+DEBUG - Wide span 'FR1018' assigned to col 4 (overflow marked)
+DEBUG - Wide span 'MAIDRITE' assigned to col 5 (overflow marked)
+DEBUG - Split '72 per case 1 meal' across columns [2, 3]
+DEBUG - Wide span 'DRY3227' assigned to col 4 (overflow marked)
+DEBUG - Split 'E S Food' across columns [4, 5]
+DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+DEBUG - Split 'Breakfast Break' across columns [3]
+DEBUG - Split '2 oz gr equ , 1/2 c fruit' across columns [2, 3]
+DEBUG - Split 'serving incl bowlpack,' across columns [3]
+DEBUG - Wide span 'DRY3263' assigned to col 4 (overflow marked)
+DEBUG - Split 'Right Start' across columns [4, 5]
+DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+DEBUG - Split 'Honey Grahams, Apple' across columns [3]
+DEBUG - Split 'juice, napkin & spoon.' across columns [3]
+DEBUG - Split 'General Mills, 96 - 1' across columns [3]
+DEBUG - Wide span 'DRY3024' assigned to col 4 (overflow marked)
+DEBUG - Wide span 'GENERAL' assigned to col 5 (overflow marked)
+DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+DEBUG - Split 'oz. bowl pack per case' across columns [2, 3]
+DEBUG - Split 'MILLS INC' across columns [5]
+DEBUG - Split '168 Portions per case' across columns [2, 3]
+DEBUG - Wide span 'R2038' assigned to col 4 (overflow marked)
+DEBUG - Wide span 'Land' assigned to col 4 (overflow marked)
+DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+DEBUG - Wide span 'O'Lakes' assigned to col 5 (overflow marked)
+DEBUG - Split 'Page 1 of 241' across columns [4]
+WARNING - High empty cell ratio: 74.0% (225/304)
+DEBUG - Merging partial row 1 (2 filled cells) into previous
+DEBUG - Merging partial row 2 (3 filled cells) into previous
+DEBUG - Merging partial row 5 (2 filled cells) into previous
+DEBUG - Merging partial row 9 (2 filled cells) into previous
+DEBUG - Merging partial row 10 (2 filled cells) into previous
+DEBUG - Merging partial row 13 (1 filled cells) into previous
+DEBUG - Merging partial row 14 (3 filled cells) into previous
+DEBUG - Merging partial row 17 (1 filled cells) into previous
+DEBUG - Merging partial row 18 (2 filled cells) into previous
+INFO - Merged 19 rows into 10 clean rows
