@@ -2,33 +2,63 @@ INFO -    Extracted 256 text items natively
 INFO - Filtered 149 text items within table box from 256 total
 INFO - Adaptive row threshold: 6.0px (median gap: 5.0px)
 INFO - Grouped 149 text items into 19 rows
+WARNING - DEBUG: Using splitting method with 16 columns
+WARNING - DEBUG: Splitting enabled: True
+WARNING - DEBUG: NOT SPLITTING '189934' - spans 2 cols, splittable=False
 DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+WARNING - DEBUG: SPLITTING '160CT 3OZ BURGER' which spans 2 columns
 DEBUG - Split '160CT 3OZ BURGER' across columns [3]
+WARNING - DEBUG: NOT SPLITTING 'FR1018' - spans 2 cols, splittable=False
 DEBUG - Wide span 'FR1018' assigned to col 4 (overflow marked)
+WARNING - DEBUG: NOT SPLITTING 'MAIDRITE' - spans 2 cols, splittable=False
 DEBUG - Wide span 'MAIDRITE' assigned to col 5 (overflow marked)
+WARNING - DEBUG: SPLITTING '72 per case 1 meal' which spans 2 columns
 DEBUG - Split '72 per case 1 meal' across columns [2, 3]
+WARNING - DEBUG: NOT SPLITTING 'DRY3227' - spans 2 cols, splittable=False
 DEBUG - Wide span 'DRY3227' assigned to col 4 (overflow marked)
+WARNING - DEBUG: SPLITTING 'E S Food' which spans 2 columns
 DEBUG - Split 'E S Food' across columns [4, 5]
+WARNING - DEBUG: NOT SPLITTING '189934' - spans 2 cols, splittable=False
 DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+WARNING - DEBUG: SPLITTING 'Breakfast Break' which spans 2 columns
 DEBUG - Split 'Breakfast Break' across columns [3]
+WARNING - DEBUG: SPLITTING '2 oz gr equ , 1/2 c fruit' which spans 2 columns
 DEBUG - Split '2 oz gr equ , 1/2 c fruit' across columns [2, 3]
+WARNING - DEBUG: SPLITTING 'serving incl bowlpack,' which spans 2 columns
 DEBUG - Split 'serving incl bowlpack,' across columns [3]
+WARNING - DEBUG: NOT SPLITTING 'DRY3263' - spans 2 cols, splittable=False
 DEBUG - Wide span 'DRY3263' assigned to col 4 (overflow marked)
+WARNING - DEBUG: SPLITTING 'Right Start' which spans 2 columns
 DEBUG - Split 'Right Start' across columns [4, 5]
+WARNING - DEBUG: NOT SPLITTING '189934' - spans 2 cols, splittable=False
 DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+WARNING - DEBUG: SPLITTING 'Honey Grahams, Apple' which spans 2 columns
 DEBUG - Split 'Honey Grahams, Apple' across columns [3]
+WARNING - DEBUG: SPLITTING 'juice, napkin & spoon.' which spans 2 columns
 DEBUG - Split 'juice, napkin & spoon.' across columns [3]
+WARNING - DEBUG: SPLITTING 'General Mills, 96 - 1' which spans 2 columns
 DEBUG - Split 'General Mills, 96 - 1' across columns [3]
+WARNING - DEBUG: NOT SPLITTING 'DRY3024' - spans 2 cols, splittable=False
 DEBUG - Wide span 'DRY3024' assigned to col 4 (overflow marked)
+WARNING - DEBUG: NOT SPLITTING 'GENERAL' - spans 2 cols, splittable=False
 DEBUG - Wide span 'GENERAL' assigned to col 5 (overflow marked)
+WARNING - DEBUG: NOT SPLITTING '189934' - spans 2 cols, splittable=False
 DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+WARNING - DEBUG: SPLITTING 'oz. bowl pack per case' which spans 2 columns
 DEBUG - Split 'oz. bowl pack per case' across columns [2, 3]
+WARNING - DEBUG: SPLITTING 'MILLS INC' which spans 2 columns
 DEBUG - Split 'MILLS INC' across columns [5]
+WARNING - DEBUG: SPLITTING '168 Portions per case' which spans 2 columns
 DEBUG - Split '168 Portions per case' across columns [2, 3]
+WARNING - DEBUG: NOT SPLITTING 'R2038' - spans 2 cols, splittable=False
 DEBUG - Wide span 'R2038' assigned to col 4 (overflow marked)
+WARNING - DEBUG: NOT SPLITTING 'Land' - spans 2 cols, splittable=False
 DEBUG - Wide span 'Land' assigned to col 4 (overflow marked)
+WARNING - DEBUG: NOT SPLITTING '189934' - spans 2 cols, splittable=False
 DEBUG - Wide span '189934' assigned to col 0 (overflow marked)
+WARNING - DEBUG: NOT SPLITTING 'O'Lakes' - spans 2 cols, splittable=False
 DEBUG - Wide span 'O'Lakes' assigned to col 5 (overflow marked)
+WARNING - DEBUG: SPLITTING 'Page 1 of 241' which spans 2 columns
 DEBUG - Split 'Page 1 of 241' across columns [4]
 WARNING - High empty cell ratio: 74.0% (225/304)
 DEBUG - Merging partial row 1 (2 filled cells) into previous

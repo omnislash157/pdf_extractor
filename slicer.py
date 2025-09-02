@@ -272,19 +272,17 @@ class TableSlicer:
         return {col: ' '.join(tokens) for col, tokens in column_assignments.items()}
     
     def _bin_into_columns_with_splitting(self, 
-                                    rows: List[List[Dict[str, Any]]], 
-                                    columns: List[int]) -> List[List[str]]:
+                                        rows: List[List[Dict[str, Any]]], 
+                                        columns: List[int]) -> List[List[str]]:
         """Enhanced column binning with text splitting for wide spans."""
-    
-         # DEBUG: Verify we're in the right method
+        
+        # DEBUG: Verify we're in the right method
         logger.warning(f"DEBUG: Using splitting method with {len(columns)-1} columns")
         logger.warning(f"DEBUG: Splitting enabled: {self.enable_text_splitting}")
-    
+        
         if not columns or len(columns) < 2:
             logger.warning("Invalid column definition - creating single column")
             return [[' '.join(item['text'] for item in row)] for row in rows]
-    
-    # ... rest of method
         
         num_cols = len(columns) - 1
         table_data = []
@@ -322,6 +320,9 @@ class TableSlicer:
                 is_splittable = self._is_splittable_text(text) if self.enable_text_splitting else False
                 
                 if spans_multiple and is_splittable:
+                    # DEBUG: Log when splitting
+                    logger.warning(f"DEBUG: SPLITTING '{text}' which spans {len(overlapping_cols)} columns")
+                    
                     # Split text across columns
                     split_assignments = self._split_text_to_columns(
                         text, left_x, width, overlapping_cols, columns
@@ -335,27 +336,27 @@ class TableSlicer:
                     # Mark as overflow if it was split
                     item['overflow'] = True
                     
-            else:
-                # ADD DEBUG LINE HERE:
-                if spans_multiple:
+                else:
+                    # DEBUG: Log when not splitting
+                    if spans_multiple:
                         logger.warning(f"DEBUG: NOT SPLITTING '{text}' - spans {len(overlapping_cols)} cols, splittable={is_splittable}")
                     
-                # Assign to single best column
-                if overlapping_cols and overlap_ratios:
-                    best_idx = overlap_ratios.index(max(overlap_ratios))
-                    best_col = overlapping_cols[best_idx]
-                    col_bins[best_col].append(text)
+                    # Assign to single best column
+                    if overlapping_cols and overlap_ratios:
+                        best_idx = overlap_ratios.index(max(overlap_ratios))
+                        best_col = overlapping_cols[best_idx]
+                        col_bins[best_col].append(text)
                         
-                    # Mark as overflow if it spans multiple columns but wasn't split
-                    if spans_multiple:
-                        item['overflow'] = True
-                        logger.debug(f"Wide span '{text}' assigned to col {best_col} (overflow marked)")
-                else:
-                    # No overlap - use fallback
-                    for c in range(num_cols):
-                        if columns[c] <= left_x < columns[c + 1]:
-                             col_bins[c].append(text)
-                            break
+                        # Mark as overflow if it spans multiple columns but wasn't split
+                        if spans_multiple:
+                            item['overflow'] = True
+                            logger.debug(f"Wide span '{text}' assigned to col {best_col} (overflow marked)")
+                    else:
+                        # No overlap - use fallback
+                        for c in range(num_cols):
+                            if columns[c] <= left_x < columns[c + 1]:
+                                col_bins[c].append(text)
+                                break
             
             # Join text in each column
             col_texts = [' '.join(bin_items) for bin_items in col_bins]
